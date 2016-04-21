@@ -49,7 +49,7 @@ func NewApp(servers ...*http.Server) *App {
 	}
 }
 
-func (a *App) Listen() error {
+func (a *App) Listen(listenerFunc func(net.Listener) net.Listener) error {
 	for _, s := range a.servers {
 		// TODO: default addresses
 		l, err := a.net.Listen("tcp", s.Addr)
@@ -58,6 +58,9 @@ func (a *App) Listen() error {
 		}
 		if s.TLSConfig != nil {
 			l = tls.NewListener(l, s.TLSConfig)
+		}
+		if listenerFunc != nil {
+			l = listenerFunc(l)
 		}
 		a.listeners = append(a.listeners, l)
 	}
