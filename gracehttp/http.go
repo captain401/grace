@@ -26,7 +26,7 @@ var (
 )
 
 // An app contains one or more servers and associated configuration.
-type app struct {
+type App struct {
 	servers   []*http.Server
 	http      *httpdown.HTTP
 	net       *gracenet.Net
@@ -35,8 +35,8 @@ type app struct {
 	errors    chan error
 }
 
-func newApp(servers []*http.Server) *app {
-	return &app{
+func NewApp(servers ...*http.Server) *App {
+	return &App{
 		servers:   servers,
 		http:      &httpdown.HTTP{},
 		net:       &gracenet.Net{},
@@ -49,7 +49,7 @@ func newApp(servers []*http.Server) *app {
 	}
 }
 
-func (a *app) listen() error {
+func (a *App) Listen() error {
 	for _, s := range a.servers {
 		// TODO: default addresses
 		l, err := a.net.Listen("tcp", s.Addr)
@@ -64,13 +64,13 @@ func (a *app) listen() error {
 	return nil
 }
 
-func (a *app) serve() {
+func (a *App) serve() {
 	for i, s := range a.servers {
 		a.sds = append(a.sds, a.http.Serve(s, a.listeners[i]))
 	}
 }
 
-func (a *app) wait() {
+func (a *App) wait() {
 	var wg sync.WaitGroup
 	wg.Add(len(a.sds) * 2) // Wait & Stop
 	go a.signalHandler(&wg)
@@ -85,7 +85,7 @@ func (a *app) wait() {
 	wg.Wait()
 }
 
-func (a *app) term(wg *sync.WaitGroup) {
+func (a *App) term(wg *sync.WaitGroup) {
 	for _, s := range a.sds {
 		go func(s httpdown.Server) {
 			defer wg.Done()
@@ -96,7 +96,7 @@ func (a *app) term(wg *sync.WaitGroup) {
 	}
 }
 
-func (a *app) signalHandler(wg *sync.WaitGroup) {
+func (a *App) signalHandler(wg *sync.WaitGroup) {
 	ch := make(chan os.Signal, 10)
 	signal.Notify(ch, syscall.SIGTERM, syscall.SIGUSR2)
 	for {
@@ -120,14 +120,7 @@ func (a *app) signalHandler(wg *sync.WaitGroup) {
 
 // Serve will serve the given http.Servers and will monitor for signals
 // allowing for graceful termination (SIGTERM) or restart (SIGUSR2).
-func Serve(servers ...*http.Server) error {
-	a := newApp(servers)
-
-	// Acquire Listeners
-	if err := a.listen(); err != nil {
-		return err
-	}
-
+func (a *App) Serve() error {
 	// Some useful logging.
 	if *verbose {
 		if didInherit {
@@ -171,6 +164,19 @@ func Serve(servers ...*http.Server) error {
 		}
 		return nil
 	}
+}
+
+// Serve will serve the given http.Servers and will monitor for signals
+// allowing for graceful termination (SIGTERM) or restart (SIGUSR2).
+func Serve(servers ...*http.Server) error {
+	a := NewApp(servers...)
+
+	// Acquire Listeners
+	if err := a.Listen(nil); err != nil {
+		return err
+	}
+
+	return a.Serve()
 }
 
 // Used for pretty printing addresses.
